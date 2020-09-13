@@ -1,6 +1,7 @@
 use chrono::prelude::*;
 use clap::{App, Arg};
 use git2::Repository;
+use std::collections::HashMap;
 use std::env;
 use std::fs::{read_dir, remove_file, File};
 use std::io::prelude::*;
@@ -31,13 +32,11 @@ struct Deary {
 }
 
 impl Deary {
-    fn init(repo_path: &Path, gpg_id: &str, name: &str, email: &str) {
-        let repo = Repository::init(repo_path).unwrap();
-        let mut config = repo.config().unwrap();
-        config.set_str("user.name", name).unwrap();
-        config.set_str("user.email", email).unwrap();
-
+    fn init(repo_path: &Path, gpg_id: &str, git_config: HashMap<&str, &str>) {
+        Repository::init(repo_path).unwrap();
         let deary = Deary::open(repo_path);
+        deary.set_config(git_config);
+
         let mut file = File::create(deary.gpg_id_path()).unwrap();
         file.write_all(gpg_id.as_bytes()).unwrap();
         deary.commit_change(GPG_ID_FILE_NAME, Change::Add, true);
@@ -46,6 +45,13 @@ impl Deary {
     fn open(repo_path: &Path) -> Deary {
         let repo = Repository::open(repo_path).unwrap();
         Deary { repo }
+    }
+
+    fn set_config(&self, config: HashMap<&str, &str>) {
+        let mut git_config = self.repo.config().unwrap();
+        for (k, v) in &config {
+            git_config.set_str(k, v).unwrap();
+        }
     }
 
     fn commit_change(&self, file: &str, change: Change, initial: bool) {
@@ -62,6 +68,7 @@ impl Deary {
         let tree = self.repo.find_tree(oid).unwrap();
         let signature = self.repo.signature().unwrap();
 
+        // TODO: Simplify this
         if initial {
             self.repo
                 .commit(
@@ -223,12 +230,10 @@ fn main() {
                 eprintln!("Repository {} already exists", repo_path.display());
                 std::process::exit(1);
             }
-            Deary::init(
-                &repo_path,
-                init.value_of("key_id").unwrap(),
-                "noname",
-                "noemail",
-            );
+            let mut git_config = HashMap::new();
+            git_config.insert("user.name", "noname");
+            git_config.insert("user.email", "noemail");
+            Deary::init(&repo_path, init.value_of("key_id").unwrap(), git_config);
         }
         ("create", Some(_)) => {
             Deary::open(&find_repo_path()).create_entry();
