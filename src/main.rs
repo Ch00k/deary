@@ -10,6 +10,7 @@ use std::io::prelude::*;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
+use std::result;
 use tempfile::NamedTempFile;
 
 const TMP_DIR: &str = "/dev/shm";
@@ -20,6 +21,8 @@ const GPG_OPTS: &[&str] = &[
     "--compress-algo=none",
     "--no-encrypt-to",
 ];
+
+type Result<T> = result::Result<T, DearyError>;
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct DearyError {
@@ -70,11 +73,7 @@ struct Deary {
 }
 
 impl Deary {
-    fn init(
-        repo_path: &Path,
-        gpg_id: &str,
-        git_config: HashMap<&str, &str>,
-    ) -> Result<(), DearyError> {
+    fn init(repo_path: &Path, gpg_id: &str, git_config: HashMap<&str, &str>) -> Result<()> {
         let repo = git2::Repository::init(repo_path)?;
         let deary = Deary::open_from_repo(repo);
         deary.set_config(git_config)?;
@@ -84,7 +83,7 @@ impl Deary {
         deary.commit_change(GPG_ID_FILE_NAME, Change::Add, true)
     }
 
-    fn open_from_path(repo_path: &Path) -> Result<Deary, DearyError> {
+    fn open_from_path(repo_path: &Path) -> Result<Deary> {
         let repo = git2::Repository::open(repo_path)?;
         Ok(Deary { repo })
     }
@@ -93,7 +92,7 @@ impl Deary {
         Deary { repo }
     }
 
-    fn set_config(&self, config: HashMap<&str, &str>) -> Result<(), DearyError> {
+    fn set_config(&self, config: HashMap<&str, &str>) -> Result<()> {
         let mut git_config = self.repo.config()?;
         for (k, v) in &config {
             git_config.set_str(k, v)?;
@@ -101,7 +100,7 @@ impl Deary {
         Ok(())
     }
 
-    fn commit_change(&self, file: &str, change: Change, initial: bool) -> Result<(), DearyError> {
+    fn commit_change(&self, file: &str, change: Change, initial: bool) -> Result<()> {
         let file_path = Path::new(file);
 
         let mut index = self.repo.index()?;
@@ -147,14 +146,14 @@ impl Deary {
         self.repo_dir().join(GPG_ID_FILE_NAME)
     }
 
-    fn gpg_id(&self) -> Result<String, DearyError> {
+    fn gpg_id(&self) -> Result<String> {
         let mut file = File::open(self.gpg_id_path())?;
         let mut gpg_id = String::new();
         file.read_to_string(&mut gpg_id)?;
         Ok(gpg_id)
     }
 
-    fn create_entry(&self) -> Result<(), DearyError> {
+    fn create_entry(&self) -> Result<()> {
         let tmp_file = NamedTempFile::new_in(TMP_DIR)?;
         let dt = Utc::now();
         let file_name = dt.format("%Y%m%d-%H%M%S").to_string();
@@ -167,12 +166,12 @@ impl Deary {
         Ok(())
     }
 
-    fn read_entry(&self, name: &str) -> Result<Vec<u8>, DearyError> {
+    fn read_entry(&self, name: &str) -> Result<Vec<u8>> {
         let file_path = self.repo_dir().join(name);
         decrypt_entry(&file_path)
     }
 
-    fn update_entry(&self, name: &str) -> Result<(), DearyError> {
+    fn update_entry(&self, name: &str) -> Result<()> {
         let file_path = self.repo_dir().join(name);
         let text = decrypt_entry(&file_path)?;
 
@@ -186,13 +185,13 @@ impl Deary {
         Ok(())
     }
 
-    fn delete_entry(&self, name: &str) -> Result<(), DearyError> {
+    fn delete_entry(&self, name: &str) -> Result<()> {
         let file_path = self.repo_dir().join(name);
         remove_file(file_path)?;
         self.commit_change(name, Change::Delete, false)
     }
 
-    fn list_entries(&self) -> Result<Vec<String>, DearyError> {
+    fn list_entries(&self) -> Result<Vec<String>> {
         let paths = read_dir(self.repo_dir())?;
         let mut file_names = vec![];
 
@@ -206,7 +205,7 @@ impl Deary {
     }
 }
 
-fn open_editor(temp_file_path: &Path) -> Result<(), DearyError> {
+fn open_editor(temp_file_path: &Path) -> Result<()> {
     let status = Command::new("vim").arg(temp_file_path).spawn()?.wait()?;
     if status.success() {
         Ok(())
@@ -215,7 +214,7 @@ fn open_editor(temp_file_path: &Path) -> Result<(), DearyError> {
     }
 }
 
-fn decrypt_entry(path: &Path) -> Result<Vec<u8>, DearyError> {
+fn decrypt_entry(path: &Path) -> Result<Vec<u8>> {
     Ok(Command::new("gpg")
         .args(GPG_OPTS)
         .arg("--decrypt")
@@ -224,7 +223,7 @@ fn decrypt_entry(path: &Path) -> Result<Vec<u8>, DearyError> {
         .stdout)
 }
 
-fn encrypt_entry(input_path: &Path, output_path: &Path, gpg_id: &str) -> Result<(), DearyError> {
+fn encrypt_entry(input_path: &Path, output_path: &Path, gpg_id: &str) -> Result<()> {
     let status = Command::new("gpg")
         .args(GPG_OPTS)
         .arg("--encrypt")
