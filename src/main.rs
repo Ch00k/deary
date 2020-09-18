@@ -1,5 +1,5 @@
 use chrono::prelude::*;
-use clap::{App, Arg};
+use clap::{crate_authors, crate_description, crate_version, App, Arg};
 use git2;
 use std::collections::HashMap;
 use std::env;
@@ -255,29 +255,31 @@ fn exit_with_error(error: DearyError) {
 
 fn main() {
     let deary = App::new("deary")
-        .version("0.1.0")
-        .author("AY")
-        .about("dear diary")
+        .version(crate_version!())
+        .author(crate_authors!())
+        .about(crate_description!())
         .subcommand(
-            App::new("init")
-                .about("init")
-                .arg(Arg::with_name("key_id").about("GPG key ID").required(true)),
+            App::new("init").about("Initialize a new diary").arg(
+                Arg::with_name("key_id")
+                    .about("GPG key ID (or email address, associated with the key)")
+                    .required(true),
+            ),
         )
-        .subcommand(App::new("list").about("list"))
+        .subcommand(App::new("list").about("List diary entries"))
         .subcommand(
             App::new("show")
-                .about("show")
+                .about("Show a diary entry")
                 .arg(Arg::with_name("name").about("Entry name").required(true)),
         )
-        .subcommand(App::new("create").about("create"))
+        .subcommand(App::new("create").about("Create a new diary entry"))
         .subcommand(
             App::new("edit")
-                .about("edit")
+                .about("Edit a diary entry")
                 .arg(Arg::with_name("name").about("Entry name").required(true)),
         )
         .subcommand(
             App::new("delete")
-                .about("delete")
+                .about("Delete a diary entry")
                 .arg(Arg::with_name("name").about("Entry name").required(true)),
         )
         .get_matches();
