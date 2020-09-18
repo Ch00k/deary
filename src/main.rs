@@ -75,21 +75,20 @@ struct Deary {
 impl Deary {
     fn init(repo_path: &Path, gpg_id: &str, git_config: HashMap<&str, &str>) -> Result<()> {
         let repo = git2::Repository::init(repo_path)?;
-        let deary = Deary::open_from_repo(repo);
+        let deary = Deary { repo };
         deary.set_config(git_config)?;
-
-        let mut file = File::create(deary.gpg_id_path())?;
-        file.write_all(gpg_id.as_bytes())?;
-        deary.commit_change(GPG_ID_FILE_NAME, Change::Add, true)
+        deary.create_gpg_id_file(gpg_id)
     }
 
-    fn open_from_path(repo_path: &Path) -> Result<Deary> {
+    fn create_gpg_id_file(&self, gpg_id: &str) -> Result<()> {
+        let mut file = File::create(self.gpg_id_path())?;
+        file.write_all(gpg_id.as_bytes())?;
+        self.commit_change(GPG_ID_FILE_NAME, Change::Add, true)
+    }
+
+    fn new(repo_path: &Path) -> Result<Deary> {
         let repo = git2::Repository::open(repo_path)?;
         Ok(Deary { repo })
-    }
-
-    fn open_from_repo(repo: git2::Repository) -> Deary {
-        Deary { repo }
     }
 
     fn set_config(&self, config: HashMap<&str, &str>) -> Result<()> {
@@ -110,31 +109,28 @@ impl Deary {
         }
         index.write()?;
 
-        let oid = self.repo.index().unwrap().write_tree()?;
+        let oid = index.write_tree()?;
         let tree = self.repo.find_tree(oid)?;
         let signature = self.repo.signature()?;
 
-        // TODO: Simplify this
-        if initial {
-            self.repo.commit(
-                Some("HEAD"),
-                &signature,
-                &signature,
-                &format!("{:?} {}", change, file),
-                &tree,
-                &[],
-            )?;
-        } else {
-            let parent_commit = self.repo.head().unwrap().peel_to_commit().unwrap();
-            self.repo.commit(
-                Some("HEAD"),
-                &signature,
-                &signature,
-                &format!("{:?} {}", change, file),
-                &tree,
-                &[&parent_commit],
-            )?;
+        let mut parent_commit: Vec<&git2::Commit> = vec![];
+
+        let commit;
+        if !initial {
+            let head = self.repo.head()?;
+            commit = head.peel_to_commit()?;
+            parent_commit.push(&commit);
         }
+
+        self.repo.commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            &format!("{:?} {}", change, file),
+            &tree,
+            &parent_commit,
+        )?;
+
         Ok(())
     }
 
@@ -303,7 +299,7 @@ fn main() {
             }
         }
         ("create", Some(_)) => {
-            match Deary::open_from_path(&find_repo_path()) {
+            match Deary::new(&find_repo_path()) {
                 Ok(deary) => {
                     if let Err(e) = deary.create_entry() {
                         exit_with_error(e);
@@ -313,7 +309,7 @@ fn main() {
             };
         }
         ("show", Some(show)) => {
-            match Deary::open_from_path(&find_repo_path()) {
+            match Deary::new(&find_repo_path()) {
                 Ok(deary) => match deary.read_entry(show.value_of("name").unwrap()) {
                     Ok(text) => {
                         if let Err(e) = io::stdout().write_all(&text) {
@@ -327,7 +323,7 @@ fn main() {
             };
         }
         ("edit", Some(edit)) => {
-            match Deary::open_from_path(&find_repo_path()) {
+            match Deary::new(&find_repo_path()) {
                 Ok(deary) => {
                     if let Err(e) = deary.update_entry(edit.value_of("name").unwrap()) {
                         exit_with_error(e);
@@ -337,7 +333,7 @@ fn main() {
             };
         }
         ("delete", Some(delete)) => {
-            match Deary::open_from_path(&find_repo_path()) {
+            match Deary::new(&find_repo_path()) {
                 Ok(deary) => {
                     if let Err(e) = deary.delete_entry(delete.value_of("name").unwrap()) {
                         exit_with_error(e);
@@ -347,7 +343,7 @@ fn main() {
             };
         }
         ("list", Some(_)) => {
-            match Deary::open_from_path(&find_repo_path()) {
+            match Deary::new(&find_repo_path()) {
                 Ok(deary) => match deary.list_entries() {
                     Ok(entries) => {
                         for e in entries {
