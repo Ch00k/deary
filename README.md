@@ -1,10 +1,11 @@
 # deary
 
-**deary** is a personal secure diary. It was inspired by
+**`deary`** is a personal secure diary. It was inspired by
 [`pass`](https://www.passwordstore.org), the standard unix password manager. In deary the
 entire diary is a Git repository, and each entry is encrypted with GPG.
 
-Currently only Linux x86_64 is supported.
+Due to the fact that `deary` uses `/dev/shm` for temporary files, only Linux is supported
+at the moment.
 
 ## Installation
 
