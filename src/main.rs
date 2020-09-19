@@ -318,7 +318,6 @@ fn main() {
                     }
                     Err(e) => exit_with_error(e),
                 },
-
                 Err(e) => exit_with_error(e),
             };
         }

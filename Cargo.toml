@@ -4,6 +4,12 @@ description = "Encrypted personal diary"
 version = "0.0.1"
 authors = ["Andrii Yurchuk <ay@mntw.re>"]
 edition = "2018"
+repository = "https://github.com/Ch00k/deary"
+homepage = "https://github.com/Ch00k/deary"
+keywords = ["cli", "diary", "notes", "personal", "encrypted", "gpg", "secure"]
+categories = ["command-line-utilities"]
+readme = "README.md"
+license = "WTFPL"
 
 [dependencies]
 clap = "3.0.0-beta.1"
