@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::result;
 use tempfile::NamedTempFile;
+use which;
 
 const REPO_DIR: &str = ".deary";
 const TMP_DIR: &str = "/dev/shm";
@@ -64,6 +65,12 @@ impl From<io::Error> for DearyError {
 
 impl From<env::VarError> for DearyError {
     fn from(e: env::VarError) -> Self {
+        DearyError::new(&e.to_string())
+    }
+}
+
+impl From<which::Error> for DearyError {
+    fn from(e: which::Error) -> Self {
         DearyError::new(&e.to_string())
     }
 }
@@ -208,8 +215,36 @@ pub fn find_repo_path() -> PathBuf {
     path
 }
 
+fn find_editor() -> Result<String> {
+    match env::var("EDITOR") {
+        Ok(editor) => Ok(editor),
+        Err(_) => match which::which("vim") {
+            Ok(vim) => Ok(vim.into_os_string().into_string().unwrap()),
+            Err(error) => Err(DearyError::new(&format!(
+                "EDITOR is not set, and vim not found in PATH ({})",
+                &error
+            ))),
+        },
+    }
+}
+
+fn find_gpg() -> Result<String> {
+    match which::which("gpg") {
+        Ok(gpg) => Ok(gpg.into_os_string().into_string().unwrap()),
+        Err(error) => Err(DearyError::new(&format!(
+            "gpg executable not found in PATH ({})",
+            error
+        ))),
+    }
+}
+
 fn open_editor(temp_file_path: &Path) -> Result<()> {
-    let status = Command::new("vim").arg(temp_file_path).spawn()?.wait()?;
+    let editor = match find_editor() {
+        Ok(e) => e,
+        Err(err) => return Err(err),
+    };
+
+    let status = Command::new(&editor).arg(temp_file_path).spawn()?.wait()?;
     if status.success() {
         Ok(())
     } else {
@@ -218,7 +253,11 @@ fn open_editor(temp_file_path: &Path) -> Result<()> {
 }
 
 fn decrypt_entry(path: &Path) -> Result<Vec<u8>> {
-    Ok(Command::new("gpg")
+    let gpg = match find_gpg() {
+        Ok(g) => g,
+        Err(err) => return Err(err),
+    };
+    Ok(Command::new(gpg)
         .args(GPG_OPTS)
         .arg("--decrypt")
         .arg(path)
@@ -227,7 +266,11 @@ fn decrypt_entry(path: &Path) -> Result<Vec<u8>> {
 }
 
 fn encrypt_entry(input_path: &Path, output_path: &Path, gpg_id: &str) -> Result<()> {
-    let status = Command::new("gpg")
+    let gpg = match find_gpg() {
+        Ok(g) => g,
+        Err(err) => return Err(err),
+    };
+    let status = Command::new(gpg)
         .args(GPG_OPTS)
         .arg("--encrypt")
         .arg("--recipient")
