@@ -13,6 +13,8 @@ use std::result;
 use tempfile::NamedTempFile;
 use which;
 
+const EDITOR: &str = "vim";
+const GPG: &str = "gpg";
 const REPO_DIR: &str = ".deary";
 const TMP_DIR: &str = "/dev/shm";
 const GPG_ID_FILE_NAME: &str = ".gpg_id";
@@ -215,27 +217,31 @@ pub fn find_repo_path() -> PathBuf {
     path
 }
 
-fn find_editor() -> Result<String> {
+fn find_executable(name: &str) -> Result<PathBuf> {
+    match which::which(name) {
+        Ok(e) => Ok(e),
+        Err(error) => Err(DearyError::new(&format!(
+            "{} not found in PATH ({})",
+            name, error
+        ))),
+    }
+}
+
+fn find_editor() -> Result<PathBuf> {
     match env::var("EDITOR") {
-        Ok(editor) => Ok(editor),
-        Err(_) => match which::which("vim") {
-            Ok(vim) => Ok(vim.into_os_string().into_string().unwrap()),
+        Ok(editor) => Ok(PathBuf::from(editor)),
+        Err(_) => match find_executable(EDITOR) {
+            Ok(vim) => Ok(vim),
             Err(error) => Err(DearyError::new(&format!(
-                "EDITOR is not set, and vim not found in PATH ({})",
+                "EDITOR not set, default is not usable: {}",
                 &error
             ))),
         },
     }
 }
 
-fn find_gpg() -> Result<String> {
-    match which::which("gpg") {
-        Ok(gpg) => Ok(gpg.into_os_string().into_string().unwrap()),
-        Err(error) => Err(DearyError::new(&format!(
-            "gpg executable not found in PATH ({})",
-            error
-        ))),
-    }
+fn find_gpg() -> Result<PathBuf> {
+    find_executable(GPG)
 }
 
 fn open_editor(temp_file_path: &Path) -> Result<()> {
